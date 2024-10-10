@@ -1,1 +1,1 @@
-recursive-include berryimu/ *.py py.typed *.txt *.so *.h *.hpp *.cuh *.pyi MANIFEST.in
+recursive-include berryimu/ *.py py.typed *.txt *.so *.cpp *.h *.pyi

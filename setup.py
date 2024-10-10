@@ -2,6 +2,7 @@
 # mypy: ignore-errors
 """Setup script for the project."""
 
+import glob
 import os
 import re
 import shutil
@@ -10,6 +11,7 @@ import sys
 import sysconfig
 from multiprocessing import cpu_count
 from pathlib import Path
+from typing import List
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
@@ -147,7 +149,7 @@ class CMakeBuild(build_ext):
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
 
-        def show_and_run(cmd: list[str]) -> None:
+        def show_and_run(cmd: List[str]) -> None:
             print(" ".join(cmd))
             subprocess.run(cmd, env=env, check=True)
 
@@ -175,18 +177,22 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 
 with open("berryimu/requirements.txt", "r", encoding="utf-8") as f:
-    requirements: list[str] = f.read().splitlines()
+    requirements = f.read().splitlines()
 
 
 with open("berryimu/requirements-dev.txt", "r", encoding="utf-8") as f:
-    requirements_dev: list[str] = f.read().splitlines()
+    requirements_dev = f.read().splitlines()
 
 
 with open("berryimu/__init__.py", "r", encoding="utf-8") as fh:
     version_re = re.search(r"^__version__ = \"([^\"]*)\"", fh.read(), re.MULTILINE)
 assert version_re is not None, "Could not find version in berryimu/__init__.py"
-version: str = version_re.group(1)
+version = version_re.group(1)
 
+package_data = [f"berryimu/{name}" for name in ("py.typed", "requirements.txt", "requirements-dev.txt")]
+package_data.append("Cargo.toml")
+for ext in ("pyi", "so"):
+    package_data.extend(glob.iglob(f"berryimu/**/*.{ext}", recursive=True))
 
 setup(
     name="berryimu",
@@ -202,14 +208,12 @@ setup(
     extras_require={"dev": requirements_dev},
     ext_modules=[CMakeExtension("berryimu")],
     cmdclass={"build_ext": CMakeBuild},
-    exclude_package_data={
-        "berryimu": [
-            "**/*.cpp",
-        ],
-    },
+    include_package_data=True,
+    package_data={"berryimu": ["*.so"]},
+    packages=["berryimu"],
     entry_points={
         "console_scripts": [
-            "berryimu = berryimu.scripts.berryimu:cli_entry_point",
+            "berryimu = berryimu.cli:main",
         ],
     },
 )
