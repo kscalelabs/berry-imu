@@ -2,9 +2,8 @@
 
 import argparse
 import logging
-import time
 
-from berryimu.imu.imu import IMU
+from berryimu import IMU, KalmanFilter
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +16,11 @@ def main() -> None:
     args = parser.parse_args()
 
     imu = IMU(args.bus)
-    last = time.time()
+    filter = KalmanFilter(imu)
 
     while True:
-        current = time.time()
-        dt = current - last
-        print(imu.step(dt))
-        last = current
+        angles = filter.step()
+        logger.info("Angles: %s", angles)
 
 
 if __name__ == "__main__":
