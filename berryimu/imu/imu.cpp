@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <sstream>
+#include <unistd.h> // For close()
 
 #include "imu.h"
 
@@ -248,26 +249,15 @@ void IMU::writeGyrReg(uint8_t reg, uint8_t value) {
   }
 }
 
-IMU::IMU(int bus) : bus(bus) {
+void IMU::initializeIMU() {
   version = -1;
-
-  // Opens the I2C bus.
-  char filename[20];
-  sprintf(filename, "/dev/i2c-%d", bus);
-  file = open(filename, O_RDWR);
-  if (file < 0) {
-    throw std::runtime_error("Unable to open I2C bus " + std::to_string(bus) +
-                             "; check that the IMU is connected to this bus.");
-  }
 
   // BerryIMUv1
   selectDevice(file, LSM9DS0_ACC_ADDRESS);
-  int LSM9DS0_WHO_XM_response =
-      i2c_smbus_read_byte_data(file, LSM9DS0_WHO_AM_I_XM);
+  int LSM9DS0_WHO_XM_response = i2c_smbus_read_byte_data(file, LSM9DS0_WHO_AM_I_XM);
 
   selectDevice(file, LSM9DS0_GYR_ADDRESS);
-  int LSM9DS0_WHO_G_response =
-      i2c_smbus_read_byte_data(file, LSM9DS0_WHO_AM_I_G);
+  int LSM9DS0_WHO_G_response = i2c_smbus_read_byte_data(file, LSM9DS0_WHO_AM_I_G);
 
   if (LSM9DS0_WHO_G_response == 0xd4 && LSM9DS0_WHO_XM_response == 0x49) {
     version = 1;
@@ -290,12 +280,10 @@ IMU::IMU(int bus) : bus(bus) {
 
   // BerryIMUv2
   selectDevice(file, LSM9DS1_MAG_ADDRESS);
-  int LSM9DS1_WHO_M_response =
-      i2c_smbus_read_byte_data(file, LSM9DS1_WHO_AM_I_M);
+  int LSM9DS1_WHO_M_response = i2c_smbus_read_byte_data(file, LSM9DS1_WHO_AM_I_M);
 
   selectDevice(file, LSM9DS1_GYR_ADDRESS);
-  int LSM9DS1_WHO_XG_response =
-      i2c_smbus_read_byte_data(file, LSM9DS1_WHO_AM_I_XG);
+  int LSM9DS1_WHO_XG_response = i2c_smbus_read_byte_data(file, LSM9DS1_WHO_AM_I_XG);
 
   if (LSM9DS1_WHO_XG_response == 0x68 && LSM9DS1_WHO_M_response == 0x3d) {
     version = 2;
@@ -323,8 +311,7 @@ IMU::IMU(int bus) : bus(bus) {
   int LSM6DSL_WHO_M_response = i2c_smbus_read_byte_data(file, LSM6DSL_WHO_AM_I);
 
   selectDevice(file, LIS3MDL_ADDRESS);
-  int LIS3MDL_WHO_XG_response =
-      i2c_smbus_read_byte_data(file, LIS3MDL_WHO_AM_I);
+  int LIS3MDL_WHO_XG_response = i2c_smbus_read_byte_data(file, LIS3MDL_WHO_AM_I);
 
   if (LSM6DSL_WHO_M_response == 0x6A && LIS3MDL_WHO_XG_response == 0x3D) {
     version = 3;
@@ -346,6 +333,30 @@ IMU::IMU(int bus) : bus(bus) {
   }
 
   throw std::runtime_error("No IMU detected");
+}
+
+IMU::IMU(int bus) : bus(bus) {
+  file = openBus(bus);
+  initializeIMU();
+}
+
+void IMU::reset() {
+  if (file >= 0) {
+    close(file);
+  }
+  file = openBus(bus);
+  initializeIMU();
+}
+
+int IMU::openBus(int bus) {
+  char filename[20];
+  sprintf(filename, "/dev/i2c-%d", bus);
+  file = open(filename, O_RDWR);
+  if (file < 0) { 
+    throw std::runtime_error("Unable to open I2C bus " + std::to_string(bus) +
+                             "; check that the IMU is connected to this bus.");
+  }
+  return file;
 }
 
 ftime_t::ftime_t() {
@@ -442,6 +453,11 @@ void KalmanFilter::filterStep(vector_4d_t<float> &p, float accAngle,
   p.v11() -= k1 * p.v01();
 }
 
+void KalmanFilter::reset() {
+  bias = {0.0, 0.0, 0.0};
+  kfAngle = {0.0, 0.0, 0.0};
+}
+
 PYBIND11_MODULE(imu, m) {
   py::class_<vector_2d_t<float>>(m, "Vector2D")
       .def(py::init<float, float>(), "x"_a, "y"_a)
@@ -500,7 +516,8 @@ PYBIND11_MODULE(imu, m) {
       .def("read_acc", &IMU::readAcc)
       .def("read_mag", &IMU::readMag)
       .def_property_readonly("version", &IMU::versionString)
-      .def("__str__", &IMU::toString);
+      .def("__str__", &IMU::toString)
+      .def("reset", &IMU::reset, "Reset the IMU bus connection");
 
   py::class_<ftime_t>(m, "Time")
       .def(py::init<>())
@@ -516,5 +533,6 @@ PYBIND11_MODULE(imu, m) {
       .def(py::init<IMU &, float, float, float, float>(), "imu"_a,
            "q_angle"_a = 0.01, "q_gyro"_a = 0.0003, "r_angle"_a = 0.01,
            "min_dt"_a = 0.01)
-      .def("step", &KalmanFilter::step, "Steps the filter");
+      .def("step", &KalmanFilter::step, "Steps the filter")
+      .def("reset", &KalmanFilter::reset, "Resets the filter");
 }

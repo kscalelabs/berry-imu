@@ -13,14 +13,25 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--bus", type=int, default=1)
+    parser.add_argument("--step", action="store_true")
     args = parser.parse_args()
 
     imu = IMU(args.bus)
     filter = KalmanFilter(imu)
 
     while True:
-        angles = filter.step()
-        logger.info("Angles: %s", angles)
+        try:
+            if args.step:
+                line = input("Press 'r' to reset the filter: ").strip()
+                if line == "r":
+                    filter.reset()
+                    imu.reset()
+                    logger.info("IMU and filter reset")
+
+            angles = filter.step()
+            logger.info("Angles: %s", angles)
+        except Exception as e:
+            logger.error("Error: %s", e)
 
 
 if __name__ == "__main__":

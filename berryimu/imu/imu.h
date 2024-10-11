@@ -78,6 +78,7 @@ public:
 class IMU {
 public:
   IMU(int bus = 1);
+  void reset();
 
   float getMagYaw();
 
@@ -103,6 +104,9 @@ private:
 
   void readBlock(uint8_t command, uint8_t size, uint8_t *data);
   void selectDevice(int file, int addr);
+
+  int openBus(int bus);
+  void initializeIMU();
 
   void writeAccReg(uint8_t reg, uint8_t value);
   void writeMagReg(uint8_t reg, uint8_t value);
@@ -130,6 +134,8 @@ public:
                float qMag = 0.0001, float rAngle = 0.01, float minDt = 0.02);
 
   angles_t step();
+
+  void reset();
 
 private:
   IMU &imu;
